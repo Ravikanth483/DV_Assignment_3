@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emails_Network Visualization</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        svg {
+            width: 100vw;
+            height: 100vh;
+            margin: 0;
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        line{
+            stroke-width: 0.2;
+        }
+        text{
+            font-family: sans-serif;
+            font-size: large;
+        }
+        .inactive {
+            display: none;
+        }
+
+        .node-label {
+            fill: black; 
+            font-size: 15px; 
+            font-weight: bold; 
+            stroke: white; 
+            stroke-width: 2px; 
+            paint-order: stroke; 
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <script>
+        const width = 1500;
+        const height = 1200;
+        let svg = d3.select("body").append("svg")
+            .attr("viewBox", `-${width / 2} -${height / 2} ${width} ${height}`);
+
+        let gCanvas = svg.append("g")
+            .attr("class", "canvas");
+
+        let gLinks = gCanvas.append("g")
+            .attr("class", "links");
+
+        let gNodes = gCanvas.append("g")
+            .attr("class", "nodes");
+
+        let zoom = d3.zoom()
+            .scaleExtent([0.1, 10])
+            .on("zoom", zoomed);
+
+        svg.call(zoom);
+
+        function zoomed(event) {
+            gCanvas.attr("transform", event.transform);
+        }
+
+        d3.json("~/Downloads/DV_Major_assignment_3/Emails_Graph.json").then(data => {
+        
+            let degrees = data.nodes.reduce((acc, d) => {
+                acc[d.id] = d.degree;
+                return acc;
+            }, {});
+
+            const degreeExtent=d3.extent(Object.values(degrees),d=>d);
+            const maxDegree = Math.max(...Object.values(degrees));
+            const radiusScale = d3.scaleSqrt()
+                .domain([0, maxDegree])
+                .range([10, 25]);
+            const colorScale=d3.scaleOrdinal(d3.schemeCategory10);
+    
+            let links = gLinks.selectAll('.link')
+                .data(data.links)
+                .enter()
+                .append("line")
+                .attr("class", "link")
+                .attr("stroke", "lightgray") 
+                .attr("stroke-width", 2);
+
+            let nodes = gNodes.selectAll(".node")
+                .data(data.nodes)
+                .enter()
+                .append('g')
+                .attr("class", "node"); 
+
+            nodes.append('circle')
+                .attr("r", 0) 
+                .attr("fill", d => colorScale(d.cluster_label))
+                .attr("class", d => "c_" + d.cluster_label)
+                .transition()
+                .duration(500)
+                .attr("r", d => radiusScale(d.degree));
+
+            nodes.append("text")
+                .text(d => d.id)
+                .attr("text-anchor", "middle")
+                .attr("dy", ".35em")
+                .style("font-size", d => `${radiusScale(d.degree) * 0.7}px`) // Set font size proportional to node size
+                .style("opacity", 0) 
+                .transition()
+                .delay(500)
+                .style("opacity", 1); 
+
+            nodes.on("mouseenter", (event, d) => {
+                d3.selectAll("circle").classed("inactive", true);
+                d3.selectAll("text").classed("inactive", true);
+                d3.selectAll(".node")
+                    .filter(e => e.cluster_label === d.cluster_label)
+                    .selectAll("circle")
+                    .classed("inactive", false);
+                d3.selectAll(".node")
+                    .filter(e => e.cluster_label === d.cluster_label)
+                    .selectAll("text")
+                    .classed("inactive", false);
+            });
+
+            nodes.on("mouseleave", (event, d) => {
+                d3.selectAll("circle").classed("inactive", false);
+                d3.selectAll("text").classed("inactive", false);
+            });
+
+            let fsimulation = d3.forceSimulation(data.nodes)
+                .force('center', d3.forceCenter(0, 0)) 
+                .force('link', d3.forceLink(data.links).id(d => d.id).distance(600).strength(0.2))
+                .force('collide', d3.forceCollide().radius(d => radiusScale(d.degree) * 1.5).iterations(5))
+                .force('charge', d3.forceManyBody().strength(-30))
+                .force('spread', d3.forceManyBody().strength(0.1))
+                .on('tick', update);
+
+            function update() {
+                nodes.attr("transform", d => `translate(${d.x},${d.y})`);
+                links
+                    .attr("x1", d => d.source.x)
+                    .attr("y1", d => d.source.y)
+                    .attr("x2", d => d.target.x)
+                    .attr("y2", d => d.target.y);
+            }
+        });
+    </script>
+</body>
+</html>
